@@ -103,3 +103,9 @@ GET /api/orders/{id}
 ```
 
 Order endpoints require authentication.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/batuhansacofficial/EcommerceApi?tab=MIT-1-ov-file) file for details.
+
+This project was built for learning and portfolio purposes.
