@@ -9,8 +9,6 @@ Full-stack e-commerce sample project built with:
 - React + TypeScript + Vite
 - Docker Compose
 
-https://roadmap.sh/projects/ecommerce-api
-
 ## Run the full app
 
 From the project root:
