@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.vscode/
+
+src/EcommerceApi.Web/node_modules/
+src/EcommerceApi.Web/dist/
+
+*.user
+*.suo
+*.rsuser
+
+.env
+.env.*
+docker-compose.override.yml

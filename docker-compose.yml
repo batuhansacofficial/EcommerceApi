@@ -1,0 +1,43 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: src/EcommerceApi.Web/Dockerfile
+    container_name: ecommerce-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: src/EcommerceApi.Api/Dockerfile
+    container_name: ecommerce-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=ecommerce;Username=ecommerce_user;Password=ecommerce_password;GSS Encryption Mode=Disable
+      Jwt__Issuer: EcommerceApi
+      Jwt__Audience: EcommerceApi
+      Jwt__SecretKey: development-secret-key-development-secret-key-12345
+      Jwt__ExpirationMinutes: 60
+    ports:
+      - "5211:8080"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:18
+    container_name: ecommerce-postgres
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: ecommerce_user
+      POSTGRES_PASSWORD: ecommerce_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ecommerce_postgres_data:/var/lib/postgresql
+
+volumes:
+  ecommerce_postgres_data:
