@@ -68,7 +68,11 @@ internal static class IntegrationSuite
         Environment.SetEnvironmentVariable("Jwt__ExpirationMinutes", "15");
         Environment.SetEnvironmentVariable("Logging__LogLevel__Default", "Error");
         await using (var db = Db()) await db.Database.MigrateAsync();
-        app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, "src", "EcommerceApi.Api")))
+            repository = repository.Parent;
+        var contentRoot = Path.Combine(repository?.FullName ?? throw new DirectoryNotFoundException("Repository root not found."), "src", "EcommerceApi.Api");
+        app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseContentRoot(contentRoot).UseEnvironment("Production"));
         using var publicClient = app.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
 
         await Run("migrations, readiness and production headers", async () =>

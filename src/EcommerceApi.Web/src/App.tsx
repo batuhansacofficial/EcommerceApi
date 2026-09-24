@@ -43,6 +43,7 @@ function App() {
   const [totalProducts, setTotalProducts] = useState(0);
   const [sort, setSort] = useState("featured");
   const [user, setUser] = useState<User | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(!demoMode);
   const [cart, setCart] = useState<Cart>(emptyCart);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -72,7 +73,8 @@ function App() {
     request<Omit<User, "userId"> & { id: string }>("/api/auth/me")
       .then((account) => { setUser({ ...account, userId: account.id }); return request<Cart>("/api/cart"); })
       .then(setCart)
-      .catch(() => { /* An anonymous visitor has no session to restore. */ });
+      .catch(() => { /* An anonymous visitor has no session to restore. */ })
+      .finally(() => setSessionLoading(false));
   }, []);
 
   useEffect(() => {
@@ -96,7 +98,9 @@ function App() {
 
   function go(next: Page) { setPage(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function message(error: unknown) { setNotice(error instanceof Error ? error.message : "Something went wrong."); }
-  async function reloadProducts() { if (!demoMode) setProducts(await request<Product[]>("/api/products")); }
+  async function reloadProducts() {
+    if (!demoMode) setProducts(await request<Product[]>(`/api/products?page=${catalogPage}&pageSize=24&sort=${sort}&search=${encodeURIComponent(search.trim())}`, {}, headers => setTotalProducts(Number(headers.get("X-Total-Count") ?? 0))));
+  }
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -171,9 +175,10 @@ function App() {
         sessionStorage.setItem("mira-checkout", JSON.stringify(attempt));
         const order = await request<Order>("/api/checkout", { method: "POST", headers: { "Idempotency-Key": attempt.key }, body: JSON.stringify({ expectedTotal: cart.total }) });
         sessionStorage.removeItem("mira-checkout");
-        setOrders((current) => [order, ...current]); await reloadProducts();
+        setOrders((current) => [order, ...current]);
       }
       setCart(emptyCart); setCartOpen(false); setNotice("Simulated order created. No payment was collected."); go("orders");
+      void reloadProducts().catch(() => { /* The order is committed; a catalog refresh failure must not suggest retrying payment. */ });
     } catch (error) { message(error); }
     finally { setLoading(false); }
   }
@@ -216,7 +221,7 @@ function App() {
       <button className="icon-button mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /></button>
       <button className="wordmark" onClick={() => go("home")}>MIRA</button>
       <nav className={menuOpen ? "main-nav open" : "main-nav"} aria-label="Main navigation"><button onClick={() => go("shop")}>Shop</button><button onClick={() => { setSort("new"); go("shop"); }}>New arrivals</button><button onClick={() => { go("home"); window.setTimeout(() => document.getElementById("story")?.scrollIntoView({ behavior: "smooth" }), 100); }}>Our story</button>{user?.role === "Admin" && <button onClick={() => go("admin")}>Manage products</button>}</nav>
-      <div className="header-actions"><button className="icon-button" aria-label="Search products" onClick={() => { go("shop"); window.setTimeout(() => document.getElementById("catalog-search")?.focus(), 100); }}><Icon name="search" /></button><button className="icon-button" aria-label="Account" onClick={() => user ? showOrders() : setAuthOpen(true)}><Icon name="user" /></button><button className="icon-button bag-button" aria-label={`Shopping bag with ${cartCount} items`} onClick={() => setCartOpen(true)}><Icon name="bag" /><span>{cartCount}</span></button></div>
+      <div className="header-actions"><button className="icon-button" aria-label="Search products" onClick={() => { go("shop"); window.setTimeout(() => document.getElementById("catalog-search")?.focus(), 100); }}><Icon name="search" /></button><button className="icon-button" aria-label="Account" disabled={sessionLoading} onClick={() => user ? showOrders() : setAuthOpen(true)}><Icon name="user" /></button><button className="icon-button bag-button" aria-label={`Shopping bag with ${cartCount} items`} onClick={() => setCartOpen(true)}><Icon name="bag" /><span>{cartCount}</span></button></div>
     </div></header>
 
     {notice && <div className="notice" role="status"><span>{notice}</span><button aria-label="Dismiss message" onClick={() => setNotice("")}><Icon name="close" size={16} /></button></div>}
@@ -235,7 +240,7 @@ function App() {
 
     {page === "admin" && user?.role === "Admin" && <main className="container-xl admin-page"><div className="page-heading"><span>PRODUCT MANAGEMENT</span><h1>Catalog</h1><p>Add and edit products served by your API.</p></div><div className="admin-layout"><div className="admin-list"><h2>Products</h2>{products.map((product) => <div className="admin-row" key={product.id}><div><strong>{product.name}</strong><small>{product.sku} · {currency(product.price)} · {product.stockQuantity} in stock</small></div><button onClick={() => beginEdit(product)}>Edit</button><button aria-label={`Archive ${product.name}`} onClick={() => deleteProduct(product)}><Icon name="trash" size={18} /></button></div>)}</div><form className="admin-form" onSubmit={saveProduct}><div className="form-header"><h2>{editing ? "Edit product" : "New product"}</h2>{editing && <button type="button" onClick={() => beginEdit()}>Cancel</button>}</div><label>Name<input required maxLength={200} value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label><label>Description<textarea required maxLength={2000} rows={3} value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label><label>SKU<input required maxLength={100} value={productForm.sku} onChange={(event) => setProductForm({ ...productForm, sku: event.target.value })} /></label><div className="form-pair"><label>Price<input type="number" required min="0.01" step="0.01" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label><label>Stock<input type="number" required min="0" step="1" value={productForm.stockQuantity} onChange={(event) => setProductForm({ ...productForm, stockQuantity: event.target.value })} /></label></div>{editing && <label className="checkbox-line"><input type="checkbox" checked={productForm.isActive} onChange={(event) => setProductForm({ ...productForm, isActive: event.target.checked })} /> Active</label>}<button className="primary-button" disabled={loading} type="submit">Save product</button><p>To assign an image, add the SKU to <code>src/catalog.ts</code>.</p></form></div></main>}
 
-    <footer className="site-footer"><div className="container-xl footer-inner"><div><span className="footer-wordmark">MIRA</span><p>Considered pieces for everyday living.</p></div><nav aria-label="Footer navigation"><button onClick={() => go("shop")}>Shop</button><button onClick={() => showOrders()}>Orders</button><button onClick={() => setAuthOpen(true)}>Account</button></nav><small>© {new Date().getFullYear()} MIRA. Template preview.</small></div></footer>
+    <footer className="site-footer"><div className="container-xl footer-inner"><div><span className="footer-wordmark">MIRA</span><p>Considered pieces for everyday living.</p></div><nav aria-label="Footer navigation"><button onClick={() => go("shop")}>Shop</button><button disabled={sessionLoading} onClick={() => showOrders()}>Orders</button><button disabled={sessionLoading} onClick={() => user ? showOrders() : setAuthOpen(true)}>Account</button></nav><small>© {new Date().getFullYear()} MIRA. Template preview.</small></div></footer>
 
     {selected && <div className="overlay" onMouseDown={() => setSelected(null)}><section className="product-dialog" role="dialog" aria-modal="true" aria-label={selected.name} onMouseDown={(event) => event.stopPropagation()}><button className="dialog-close" aria-label="Close product" onClick={() => setSelected(null)}><Icon name="close" /></button><div className="dialog-image"><ProductVisual product={selected} /></div><div className="dialog-content"><span>THE COLLECTION</span><h2>{selected.name}</h2><p className="dialog-price">{currency(selected.price)}</p><p>{selected.description}</p><p className="sku-line">SKU {selected.sku} · {selected.stockQuantity} available</p><button className="primary-button" disabled={selected.stockQuantity < 1 || loading} onClick={() => addToCart(selected)}>{selected.stockQuantity ? "Add to bag" : "Sold out"} <Icon name="arrow" size={18} /></button></div></section></div>}
 

@@ -13,9 +13,7 @@
 
 ## Doğrulama durumu
 
-Önceki paket yalnız arayüzün demo modu ile sınanmıştı. Yeni güvenlik/checkout kodu üzerinde API ve frontend derlemesi, frontend lint çalıştırıldı. Test projesinin ilk derlemesindeki EF Core alt bağımlılık sürüm farkı için açık Relational 10.0.12 referansı eklendi; bu son değişikliğin restore/derlemesi otomatik onay servisinin kullanım sınırı nedeniyle henüz yeniden çalıştırılamadı.
-
-Yerel PostgreSQL kurulumu Windows uygulama denetimi nedeniyle çalışmadı. Docker Desktop/CLI bulunamadı. PostgreSQL ve tarayıcı senaryoları, yayınlanacak commit için CI'da başarıyla çalışmadan tamamlanmış kabul edilmemelidir.
+.NET çözümü 0 uyarı ve 0 hata ile derlendi; frontend lint ve production build geçti. Docker Desktop üzerindeki PostgreSQL 18 ile 13 entegrasyon senaryosu geçti. Microsoft Edge üzerinde gerçek API ile kayıt, sepet, sipariş, oturum yenileme, geçmiş, çıkış ve mobil katalog testleri (2/2) geçti. GitHub Actions ve Render yayın doğrulaması devam ediyor.
 
 **Bu not oluşturulduğu anda canlı dağıtım yapılmış değildir.** Gerçek dağıtım URL'si, commit ve CI sonuçları doğrulandıktan sonra yayın kaydına eklenmelidir.
 

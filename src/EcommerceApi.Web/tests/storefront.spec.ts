@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('real API: register, cart, checkout, restore session, order history, logout', async ({ page, context }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Shop the collection', exact: true }).click();
+  await page.getByRole('searchbox').fill('Overshirt');
   await expect(page.getByRole('button', { name: 'Add The Relaxed Overshirt to bag', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Account', exact: true }).first().click();
   await page.getByRole('button', { name: 'New here? Create an account' }).click();
@@ -31,7 +33,7 @@ test('real API: register, cart, checkout, restore session, order history, logout
 test('catalog search and mobile layout use the real catalog', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Search products', exact: true }).click();
+  await page.getByRole('button', { name: 'Shop the collection', exact: true }).click();
   await page.getByRole('searchbox').fill('Overshirt');
   await expect(page.locator('.catalog-page .product-card')).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
