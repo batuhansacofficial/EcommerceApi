@@ -67,8 +67,34 @@ jobs:
       - name: Browser scenarios with real API
         working-directory: src/EcommerceApi.Web
         run: pnpm exec playwright test
+      - name: Backup and restore rehearsal
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d mira_test -Fc -f /tmp/mira.dump
+          docker exec "$PG_CONTAINER" createdb -U postgres mira_restore_test
+          docker exec "$PG_CONTAINER" pg_restore -U postgres --no-owner -d mira_restore_test /tmp/mira.dump
+          for table in users products orders order_items cart_items; do
+            original=$(docker exec "$PG_CONTAINER" psql -U postgres -d mira_test -Atc "SELECT count(*) FROM $table")
+            restored=$(docker exec "$PG_CONTAINER" psql -U postgres -d mira_restore_test -Atc "SELECT count(*) FROM $table")
+            test "$original" = "$restored"
+            echo "$table: restored $restored rows"
+          done
+      - name: Readiness detects database failure
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker stop "$PG_CONTAINER"
+          test "$(curl --silent --max-time 30 -o /dev/null -w '%{http_code}' http://127.0.0.1:5211/health/ready)" = 503
+          curl --fail --silent http://127.0.0.1:5211/health/live
+          docker start "$PG_CONTAINER"
       - name: Build deployable container
         run: docker build --file Dockerfile --tag mira:${{ github.sha }} .
+      - name: Image vulnerability and source secret scans
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/scan" ghcr.io/aquasecurity/trivy:0.74.0 image --scanners vuln --severity HIGH,CRITICAL --format json --output /scan/image-scan.json mira:${{ github.sha }}
+          node -e "const d=require('./image-scan.json'); const v=d.Results?.flatMap(r=>r.Vulnerabilities??[])??[]; console.log(v.map(x=>({id:x.VulnerabilityID,package:x.PkgName,severity:x.Severity,fixed:x.FixedVersion}))); if(v.some(x=>x.FixedVersion)) process.exit(1)"
+          docker run --rm -v "$PWD:/scan:ro" ghcr.io/aquasecurity/trivy:0.74.0 fs --scanners secret --exit-code 1 --skip-dirs /scan/.git,/scan/src/EcommerceApi.Web/node_modules,/scan/src/EcommerceApi.Web/test-results,/scan/src/EcommerceApi.Web/playwright-report /scan
       - name: NuGet security audit
         run: |
           dotnet list package --vulnerable --include-transitive --format json > /tmp/nuget-audit.json
@@ -82,4 +108,5 @@ jobs:
             src/EcommerceApi.Web/playwright-report
             /tmp/mira-api.log
             /tmp/nuget-audit.json
+            image-scan.json
           retention-days: 7
