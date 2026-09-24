@@ -2,6 +2,12 @@ bin/
 obj/
 .vs/
 .vscode/
+.tools/
+.vercel/
+**/node_modules/
+**/wwwroot/
+**/test-results/
+**/playwright-report/
 
 src/EcommerceApi.Web/node_modules/
 src/EcommerceApi.Web/dist/
@@ -12,4 +18,5 @@ src/EcommerceApi.Web/dist/
 
 .env
 .env.*
+!.env.example
 docker-compose.override.yml

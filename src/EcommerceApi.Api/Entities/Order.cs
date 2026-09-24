@@ -6,6 +6,8 @@ namespace EcommerceApi.Api.Entities
 
         public Guid UserId { get; set; }
 
+        public string? CheckoutKey { get; set; }
+
         public User User { get; set; } = null!;
 
         public decimal TotalAmount { get; set; }

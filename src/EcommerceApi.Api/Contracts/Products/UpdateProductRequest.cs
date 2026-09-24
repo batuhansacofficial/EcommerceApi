@@ -21,5 +21,9 @@ namespace EcommerceApi.Api.Contracts.Products
     [Range(0, int.MaxValue)]
     int StockQuantity,
 
-    bool IsActive);
+    bool IsActive,
+
+    [Required]
+    [Range(0, long.MaxValue)]
+    long? Version);
 }

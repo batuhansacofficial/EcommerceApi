@@ -7,5 +7,7 @@ namespace EcommerceApi.Api.Contracts.Cart
     string ProductSku,
     decimal UnitPrice,
     int Quantity,
-    decimal LineTotal);
+    decimal LineTotal,
+    bool IsAvailable,
+    int AvailableStock);
 }

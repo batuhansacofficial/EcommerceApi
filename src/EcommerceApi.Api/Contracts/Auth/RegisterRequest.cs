@@ -9,7 +9,7 @@ namespace EcommerceApi.Api.Contracts.Auth
     string Email,
 
     [Required]
-    [StringLength(100, MinimumLength = 6)]
+    [StringLength(100, MinimumLength = 12)]
     string Password,
 
     [Required]

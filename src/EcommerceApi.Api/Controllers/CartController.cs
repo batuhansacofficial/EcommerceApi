@@ -41,7 +41,9 @@ namespace EcommerceApi.Api.Controllers
                     cartItem.Product.Sku,
                     cartItem.Product.Price,
                     cartItem.Quantity,
-                    cartItem.Product.Price * cartItem.Quantity))
+                    cartItem.Product.Price * cartItem.Quantity,
+                    cartItem.Product.IsActive,
+                    cartItem.Product.StockQuantity))
                 .ToListAsync(cancellationToken);
 
             var total = items.Sum(item => item.LineTotal);
@@ -60,6 +62,8 @@ namespace EcommerceApi.Api.Controllers
             {
                 return Unauthorized();
             }
+
+            await using var transaction = await CartTransaction.BeginAsync(_dbContext, userId.Value, cancellationToken);
 
             if (request.ProductId == Guid.Empty)
             {
@@ -134,6 +138,7 @@ namespace EcommerceApi.Api.Controllers
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return await GetCart(cancellationToken);
         }
@@ -151,6 +156,8 @@ namespace EcommerceApi.Api.Controllers
                 return Unauthorized();
             }
 
+            await using var transaction = await CartTransaction.BeginAsync(_dbContext, userId.Value, cancellationToken);
+
             var cartItem = await _dbContext.CartItems
                 .Include(cartItem => cartItem.Product)
                 .FirstOrDefaultAsync(
@@ -167,6 +174,14 @@ namespace EcommerceApi.Api.Controllers
                 });
             }
 
+            if (!cartItem.Product.IsActive)
+            {
+                return Conflict(new
+                {
+                    message = "This product is no longer available. Remove it from the cart."
+                });
+            }
+
             if (request.Quantity > cartItem.Product.StockQuantity)
             {
                 return Conflict(new
@@ -179,6 +194,7 @@ namespace EcommerceApi.Api.Controllers
             cartItem.UpdatedAtUtc = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return await GetCart(cancellationToken);
         }
@@ -194,6 +210,8 @@ namespace EcommerceApi.Api.Controllers
             {
                 return Unauthorized();
             }
+
+            await using var transaction = await CartTransaction.BeginAsync(_dbContext, userId.Value, cancellationToken);
 
             var cartItem = await _dbContext.CartItems
                 .FirstOrDefaultAsync(
@@ -213,6 +231,7 @@ namespace EcommerceApi.Api.Controllers
             _dbContext.CartItems.Remove(cartItem);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return await GetCart(cancellationToken);
         }

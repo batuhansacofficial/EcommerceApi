@@ -2,6 +2,7 @@
   "name": "ecommerceapi-web",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@11.19.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,11 +11,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "bootstrap": "5.3.8",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
