@@ -42,7 +42,7 @@ databases:
   - name: ecommerce-mira-db
     plan: free
     region: frankfurt
-    databaseName: ecommerce_mira
-    user: ecommerce_mira
+    databaseName: ecommerce_mira_db
+    user: ecommerce_mira_db_user
     postgresMajorVersion: '18'
     ipAllowList: []

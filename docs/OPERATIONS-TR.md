@@ -12,7 +12,13 @@ Bu uygulama kayıt/giriş, gerçek PostgreSQL sepeti, stok ve sipariş geçmişi
 
 1. GitHub `Verify storefront and API` kontrolünün yayınlanacak commit için başarılı olmasını bekleyin.
 2. Render üzerinde Blueprint'i depodaki `render.yaml` üzerinden oluşturun. Veritabanı internete kapalıdır (`ipAllowList: []`).
-3. Şema güncellemesini **ayrı yayın adımı** olarak çalıştırın. Ücretsiz planda pre-deploy ve shell bulunmadığı için ilk kurulumda geçici olarak yalnızca yayın makinesinin IP'sini veritabanının izin listesine ekleyin. Dış bağlantı URL'sini güvenli ortam değişkenine alın; komut geçmişine veya repoya yazmayın.
+3. Şema güncellemesini **açıkça seçilen yayın adımı** olarak çalıştırın. Ücretsiz planda pre-deploy ve shell bulunmaz. İlk, boş veritabanının kurulumu için web servisi Settings → Docker Command alanına aşağıdaki geçici komutu yazın ve dağıtın. Veritabanı dış erişime kapalı kalır. Bu komutun başarılı migration/seed kaydını gördükten sonra Docker Command alanını boşaltıp yeniden dağıtın; normal başlangıç migration çalıştırmaz.
+
+```sh
+/bin/sh -c 'dotnet EcommerceApi.Api.dll --migrate --seed-demo && exec dotnet EcommerceApi.Api.dll'
+```
+
+Sonraki şema değişikliklerinde ücretli pre-deploy adımı veya yalnızca yayın makinesinin IP'sine izin verilmiş dış bağlantı üzerinden aşağıdaki ayrı komut kullanılır. Dış URL'yi güvenli ortam değişkenine alın; komut geçmişine veya repoya yazmayın.
 
 ```sh
 # Ortamda DATABASE_URL (external URL), Jwt__Issuer, Jwt__Audience,
@@ -24,7 +30,7 @@ ASPNETCORE_ENVIRONMENT=Production PublicDemo__Enabled=true DemoSeed__Enabled=tru
 ```
 
 4. Gerekirse `AdminBootstrap__Email` ve en az 16 karakterli rastgele `AdminBootstrap__Password` yalnızca bu migration/seed adımına verilir. Varsayılan yönetici hesabı yoktur. Mevcut hesabın rolü seed tarafından yükseltilmez.
-5. Migration başarılı olunca dış IP iznini kaldırın, bootstrap parolasını yayın ortamından silin ve web servisini dağıtın. Render uygulaması `DATABASE_URL` için iç ağı ve `Database__SslMode=Disable` kullanır. Bu ayarı dış URL'de kullanmayın.
+5. Migration başarılı olunca geçici Docker Command veya dış IP iznini kaldırın, varsa bootstrap parolasını yayın ortamından silin ve web servisini dağıtın. Render uygulaması `DATABASE_URL` için iç ağı ve `Database__SslMode=Disable` kullanır. Bu ayarı dış URL'de kullanmayın.
 6. `/health/ready` 200, `/` 200, kayıt → sepet → checkout → sipariş geçmişi → çıkış akışını doğrulayın. Render deploy `live` olmalı; hata günlüklerinde başlatma/DB hatası bulunmamalı.
 
 Ücretli serviste aynı migration komutu pre-deploy adımına taşınabilir. Uygulama Production modunda normal başlarken migration veya seed çalıştırmaz. Sonraki şema değişikliklerini geri uyumlu ekleme/değiştirme/kaldırma aşamalarına bölün.
