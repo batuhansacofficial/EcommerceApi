@@ -60,7 +60,7 @@ export async function request<T>(path: string, options: RequestInit = {}, onHead
   });
 
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith("/api/auth")) {
+    if (response.status === 401 && (!path.startsWith("/api/auth") || path === "/api/auth/session/logout")) {
       window.dispatchEvent(new Event("ecommerce:session-expired"));
     }
     let message = `Request failed (${response.status}).`;

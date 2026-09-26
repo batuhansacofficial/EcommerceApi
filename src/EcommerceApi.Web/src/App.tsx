@@ -81,6 +81,10 @@ function App() {
     const onExpired = () => {
       setUser(null);
       setCart(emptyCart);
+      setOrders([]);
+      setCartOpen(false);
+      setPage("home");
+      sessionStorage.removeItem("mira-checkout");
       setNotice("Your session expired. Please sign in again.");
     };
     window.addEventListener("ecommerce:session-expired", onExpired);
