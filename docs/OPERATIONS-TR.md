@@ -8,14 +8,14 @@ Bu uygulama kayıt/giriş, gerçek PostgreSQL sepeti, stok ve sipariş geçmişi
 
 ## Render kurulumu
 
-`render.yaml`: Frankfurt, bir ücretsiz Docker web servisi ve bir ücretsiz PostgreSQL 18. Ücretsiz web servisi 15 dakika boşta kalınca uyur. Ücretsiz PostgreSQL 30 gün sonra sona erer; ücretsiz planda yedekleme yoktur. Bu plan kalıcı üretim SLA'sı sağlamaz. Ücretli plana geçiş ayrıca onaylanmalıdır.
+`render.yaml`: Frankfurt, bir ücretsiz Docker web servisi ve bir ücretsiz PostgreSQL 18. Ücretsiz web servisi 15 dakika boşta kalınca uyur. Ücretsiz PostgreSQL 30 gün sonra sona erer; ücretsiz planda yönetilen yedekleme yoktur. Kalıcı barındırma için web ve veritabanı planları ayrı değerlendirilmelidir; ücretli planlar ek maliyet doğurur. Mevcut demo veritabanının bitiş tarihi 24 Ekim 2026'dır.
 
 1. GitHub `Verify storefront and API` kontrolünün yayınlanacak commit için başarılı olmasını bekleyin.
 2. Render üzerinde Blueprint'i depodaki `render.yaml` üzerinden oluşturun. Veritabanı internete kapalıdır (`ipAllowList: []`).
 3. Şema güncellemesini **açıkça seçilen yayın adımı** olarak çalıştırın. Ücretsiz planda pre-deploy ve shell bulunmaz. İlk, boş veritabanının kurulumu için web servisi Settings → Docker Command alanına aşağıdaki geçici komutu yazın ve dağıtın. Veritabanı dış erişime kapalı kalır. Bu komutun başarılı migration/seed kaydını gördükten sonra Docker Command alanını boşaltıp yeniden dağıtın; normal başlangıç migration çalıştırmaz.
 
 ```sh
-/bin/sh -c 'dotnet EcommerceApi.Api.dll --migrate --seed-demo && exec dotnet EcommerceApi.Api.dll'
+/bin/sh -c dotnet EcommerceApi.Api.dll --migrate --seed-demo && exec dotnet EcommerceApi.Api.dll
 ```
 
 Sonraki şema değişikliklerinde ücretli pre-deploy adımı veya yalnızca yayın makinesinin IP'sine izin verilmiş dış bağlantı üzerinden aşağıdaki ayrı komut kullanılır. Dış URL'yi güvenli ortam değişkenine alın; komut geçmişine veya repoya yazmayın.
@@ -72,4 +72,4 @@ pnpm exec playwright install chromium
 E2E_BASE_URL=http://127.0.0.1:5211 pnpm exec playwright test
 ```
 
-CI, PostgreSQL 18 ile 13 entegrasyon senaryosu, gerçek API ile tarayıcı akışı, frontend kontrolleri, NuGet/npm güvenlik taraması ve Docker imaj derlemesini içerir. Senaryoların dosyada bulunması başarılı çalıştıkları anlamına gelmez; ilgili commit'in CI sonucunu kontrol edin.
+CI, PostgreSQL 18 ile 13 entegrasyon senaryosu, gerçek API ile dört tarayıcı testi, frontend kontrolleri, NuGet/npm güvenlik taraması ve Docker imaj derlemesini içerir. Yayından önce hedef commit'in CI sonucunu kontrol edin. [Sürüm notları](../CHANGELOG.md) ve [bilinen sınırlamalar](KNOWN-LIMITATIONS.md) doğrulama kapsamını özetler.
