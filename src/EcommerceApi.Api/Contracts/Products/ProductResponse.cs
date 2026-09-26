@@ -9,5 +9,6 @@ namespace EcommerceApi.Api.Contracts.Products
     int StockQuantity,
     bool IsActive,
     DateTime CreatedAtUtc,
-    DateTime? UpdatedAtUtc);
+    DateTime? UpdatedAtUtc,
+    long Version);
 }

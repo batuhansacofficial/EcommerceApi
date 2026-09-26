@@ -8,6 +8,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.RateLimiting;
+using Npgsql;
 
 namespace EcommerceApi.Api.Controllers
 {
@@ -30,6 +34,8 @@ namespace EcommerceApi.Api.Controllers
         }
 
         [HttpPost("register")]
+        [HttpPost("session/register")]
+        [EnableRateLimiting("auth")]
         public async Task<ActionResult<AuthResponse>> Register(
             RegisterRequest request,
             CancellationToken cancellationToken)
@@ -61,18 +67,28 @@ namespace EcommerceApi.Api.Controllers
 
             _dbContext.Users.Add(user);
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            try { await _dbContext.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            { return Conflict(new { message = "This email is already registered." }); }
 
-            return Ok(CreateAuthResponse(user));
+            return Ok(await CreateAuthResponseAsync(user));
         }
 
         [HttpPost("login")]
+        [HttpPost("session/login")]
+        [EnableRateLimiting("auth")]
         public async Task<ActionResult<AuthResponse>> Login(
             LoginRequest request,
             CancellationToken cancellationToken)
         {
             var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
+            var limiter = HttpContext.RequestServices.GetRequiredService<AccountLoginLimiter>();
+            if (!await limiter.AllowAsync(normalizedEmail, cancellationToken))
+            {
+                Response.Headers.RetryAfter = "300";
+                return StatusCode(429, new { message = "Too many attempts for this account. Try again later." });
+            }
             var user = await _dbContext.Users
                 .FirstOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
 
@@ -105,7 +121,7 @@ namespace EcommerceApi.Api.Controllers
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            return Ok(CreateAuthResponse(user));
+            return Ok(await CreateAuthResponseAsync(user));
         }
 
         [Authorize]
@@ -140,9 +156,25 @@ namespace EcommerceApi.Api.Controllers
             return Ok(user);
         }
 
-        private AuthResponse CreateAuthResponse(User user)
+        [HttpGet("session/csrf")]
+        public IActionResult GetCsrf([FromServices] IAntiforgery antiforgery) =>
+            Ok(new { token = antiforgery.GetAndStoreTokens(HttpContext).RequestToken });
+
+        [Authorize]
+        [HttpPost("session/logout")]
+        public async Task<IActionResult> Logout(CancellationToken cancellationToken)
         {
-            var accessToken = _jwtTokenService.CreateAccessToken(user);
+            if (Guid.TryParse(User.FindFirstValue(BrowserSecurity.SessionClaim), out var sessionId))
+                await _dbContext.BrowserSessions.Where(s => s.Id == sessionId).ExecuteDeleteAsync(cancellationToken);
+            await HttpContext.SignOutAsync(BrowserSecurity.Scheme);
+            return NoContent();
+        }
+
+        private async Task<AuthResponse> CreateAuthResponseAsync(User user)
+        {
+            var browser = Request.Path.StartsWithSegments("/api/auth/session");
+            if (browser) await BrowserSecurity.SignInAsync(HttpContext, _dbContext, user);
+            var accessToken = browser ? string.Empty : _jwtTokenService.CreateAccessToken(user);
 
             return new AuthResponse(
                 accessToken,

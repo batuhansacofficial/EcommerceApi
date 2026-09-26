@@ -1,0 +1,112 @@
+name: Verify storefront and API
+on:
+  push:
+    branches: [master, feature/dotnet10-live-readiness]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only-password
+          POSTGRES_DB: mira_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mira_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE: Host=localhost;Port=5432;Database=mira_test;Username=postgres;Password=isolated-ci-only-password
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=mira_test;Username=postgres;Password=isolated-ci-only-password
+      Jwt__Issuer: mira-ci
+      Jwt__Audience: mira-ci
+      Jwt__SecretKey: ci-only-key-isolated-and-never-used-for-live-deployments
+      Jwt__ExpirationMinutes: '15'
+      DemoSeed__Enabled: 'true'
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://127.0.0.1:5211
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: '10.0.4xx'
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.19.0
+      - run: dotnet restore && dotnet build --no-restore --configuration Release --warnaserror
+      - name: Real PostgreSQL integration scenarios
+        run: dotnet run --project tests/EcommerceApi.IntegrationTests --configuration Release --no-build
+      - name: Frontend checks
+        working-directory: src/EcommerceApi.Web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run lint
+          pnpm run build
+          pnpm audit --prod --audit-level high
+          pnpm exec playwright install --with-deps chromium
+      - name: Start real API and compiled storefront
+        run: |
+          cp -r src/EcommerceApi.Web/dist src/EcommerceApi.Api/wwwroot
+          dotnet run --project src/EcommerceApi.Api --configuration Release --no-build --no-launch-profile > /tmp/mira-api.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5211/health/ready; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mira-api.log
+          exit 1
+      - name: Browser scenarios with real API
+        working-directory: src/EcommerceApi.Web
+        run: pnpm exec playwright test
+      - name: Backup and restore rehearsal
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d mira_test -Fc -f /tmp/mira.dump
+          docker exec "$PG_CONTAINER" createdb -U postgres mira_restore_test
+          docker exec "$PG_CONTAINER" pg_restore -U postgres --no-owner -d mira_restore_test /tmp/mira.dump
+          for table in users products orders order_items cart_items; do
+            original=$(docker exec "$PG_CONTAINER" psql -U postgres -d mira_test -Atc "SELECT count(*) FROM $table")
+            restored=$(docker exec "$PG_CONTAINER" psql -U postgres -d mira_restore_test -Atc "SELECT count(*) FROM $table")
+            test "$original" = "$restored"
+            echo "$table: restored $restored rows"
+          done
+      - name: Readiness detects database failure
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker stop "$PG_CONTAINER"
+          test "$(curl --silent --max-time 30 -o /dev/null -w '%{http_code}' http://127.0.0.1:5211/health/ready)" = 503
+          curl --fail --silent http://127.0.0.1:5211/health/live
+          docker start "$PG_CONTAINER"
+      - name: Build deployable container
+        run: docker build --file Dockerfile --tag mira:${{ github.sha }} .
+      - name: Image vulnerability and source secret scans
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/scan" ghcr.io/aquasecurity/trivy:0.74.0 image --scanners vuln --severity HIGH,CRITICAL --format json --output /scan/image-scan.json mira:${{ github.sha }}
+          node -e "const d=require('./image-scan.json'); const v=d.Results?.flatMap(r=>r.Vulnerabilities??[])??[]; console.log(v.map(x=>({id:x.VulnerabilityID,package:x.PkgName,severity:x.Severity,fixed:x.FixedVersion}))); if(v.some(x=>x.FixedVersion)) process.exit(1)"
+          docker run --rm -v "$PWD:/scan:ro" ghcr.io/aquasecurity/trivy:0.74.0 fs --scanners secret --exit-code 1 --skip-dirs /scan/.git,/scan/src/EcommerceApi.Web/node_modules,/scan/src/EcommerceApi.Web/test-results,/scan/src/EcommerceApi.Web/playwright-report /scan
+      - name: NuGet security audit
+        run: |
+          dotnet list package --vulnerable --include-transitive --format json > /tmp/nuget-audit.json
+          node -e "const d=require('/tmp/nuget-audit.json'); if(d.projects?.some(p=>p.frameworks?.some(f=>(f.topLevelPackages?.length??0)+(f.transitivePackages?.length??0)>0))) process.exit(1)"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: verification-evidence
+          path: |
+            src/EcommerceApi.Web/test-results
+            src/EcommerceApi.Web/playwright-report
+            /tmp/mira-api.log
+            /tmp/nuget-audit.json
+            image-scan.json
+          retention-days: 7

@@ -11,6 +11,8 @@ namespace EcommerceApi.Api.Data.Configurations
             builder.ToTable("orders");
 
             builder.HasKey(order => order.Id);
+            builder.Property(order => order.CheckoutKey).HasMaxLength(64);
+            builder.HasIndex(order => new { order.UserId, order.CheckoutKey }).IsUnique();
 
             builder.Property(order => order.TotalAmount)
                 .HasPrecision(18, 2)

@@ -24,6 +24,11 @@ namespace EcommerceApi.Api.Controllers
             [FromQuery] ProductSearchRequest request,
             CancellationToken cancellationToken)
         {
+            if (request.IsActive == false && !User.IsInRole(UserRoles.Admin))
+            {
+                return Forbid();
+            }
+
             var query = _dbContext.Products
                 .AsNoTracking();
 
@@ -39,12 +44,13 @@ namespace EcommerceApi.Api.Controllers
 
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
-                var searchPattern = $"%{request.Search.Trim()}%";
+                var escaped = request.Search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                var searchPattern = $"%{escaped}%";
 
                 query = query.Where(product =>
-                    EF.Functions.ILike(product.Name, searchPattern) ||
-                    EF.Functions.ILike(product.Description, searchPattern) ||
-                    EF.Functions.ILike(product.Sku, searchPattern));
+                    EF.Functions.ILike(product.Name, searchPattern, "\\") ||
+                    EF.Functions.ILike(product.Description, searchPattern, "\\") ||
+                    EF.Functions.ILike(product.Sku, searchPattern, "\\"));
             }
 
             if (request.MinPrice.HasValue)
@@ -57,13 +63,18 @@ namespace EcommerceApi.Api.Controllers
                 query = query.Where(product => product.Price <= request.MaxPrice.Value);
             }
 
-            if (request.IsActive.HasValue)
-            {
-                query = query.Where(product => product.IsActive == request.IsActive.Value);
-            }
+            query = query.Where(product => product.IsActive == (request.IsActive ?? true));
 
-            var products = await query
-                .OrderBy(product => product.Name)
+            Response.Headers["X-Total-Count"] = (await query.CountAsync(cancellationToken)).ToString();
+            var sorted = request.Sort switch
+            {
+                "low" => query.OrderBy(product => product.Price),
+                "high" => query.OrderByDescending(product => product.Price),
+                "new" => query.OrderByDescending(product => product.CreatedAtUtc),
+                _ => query.OrderBy(product => product.Name)
+            };
+            var products = await sorted.ThenBy(product => product.Id)
+                .Skip((request.Page - 1) * request.PageSize).Take(request.PageSize)
                 .Select(product => new ProductResponse(
                     product.Id,
                     product.Name,
@@ -73,7 +84,7 @@ namespace EcommerceApi.Api.Controllers
                     product.StockQuantity,
                     product.IsActive,
                     product.CreatedAtUtc,
-                    product.UpdatedAtUtc))
+                    product.UpdatedAtUtc, product.Version))
                 .ToListAsync(cancellationToken);
 
             return Ok(products);
@@ -84,9 +95,11 @@ namespace EcommerceApi.Api.Controllers
             Guid id,
             CancellationToken cancellationToken)
         {
+            var canSeeInactive = User.IsInRole(UserRoles.Admin);
             var product = await _dbContext.Products
                 .AsNoTracking()
-                .Where(product => product.Id == id)
+                .Where(product => product.Id == id &&
+                    (product.IsActive || canSeeInactive))
                 .Select(product => new ProductResponse(
                     product.Id,
                     product.Name,
@@ -96,7 +109,7 @@ namespace EcommerceApi.Api.Controllers
                     product.StockQuantity,
                     product.IsActive,
                     product.CreatedAtUtc,
-                    product.UpdatedAtUtc))
+                    product.UpdatedAtUtc, product.Version))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (product is null)
@@ -174,15 +187,35 @@ namespace EcommerceApi.Api.Controllers
                 });
             }
 
+            var updatedAtUtc = DateTime.UtcNow;
+            var updated = await _dbContext.Products
+                .Where(existingProduct =>
+                    existingProduct.Id == id &&
+                    existingProduct.Version == request.Version)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(existingProduct => existingProduct.Name, request.Name)
+                    .SetProperty(existingProduct => existingProduct.Description, request.Description)
+                    .SetProperty(existingProduct => existingProduct.Sku, request.Sku)
+                    .SetProperty(existingProduct => existingProduct.Price, request.Price)
+                    .SetProperty(existingProduct => existingProduct.StockQuantity, request.StockQuantity)
+                    .SetProperty(existingProduct => existingProduct.IsActive, request.IsActive)
+                    .SetProperty(existingProduct => existingProduct.UpdatedAtUtc, updatedAtUtc)
+                    .SetProperty(existingProduct => existingProduct.Version, existingProduct => existingProduct.Version + 1),
+                    cancellationToken);
+
+            if (updated != 1)
+            {
+                return Conflict(new { message = "Product changed while editing. Reload and try again." });
+            }
+
             product.Name = request.Name;
             product.Description = request.Description;
             product.Sku = request.Sku;
             product.Price = request.Price;
             product.StockQuantity = request.StockQuantity;
             product.IsActive = request.IsActive;
-            product.UpdatedAtUtc = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            product.UpdatedAtUtc = updatedAtUtc;
+            product.Version = request.Version!.Value + 1;
 
             return Ok(ToProductResponse(product));
         }
@@ -201,9 +234,10 @@ namespace EcommerceApi.Api.Controllers
                 return NotFound();
             }
 
-            _dbContext.Products.Remove(product);
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.Products.Where(p => p.Id == id).ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.IsActive, false)
+                .SetProperty(p => p.UpdatedAtUtc, DateTime.UtcNow)
+                .SetProperty(p => p.Version, p => p.Version + 1), cancellationToken);
 
             return NoContent();
         }
@@ -219,7 +253,7 @@ namespace EcommerceApi.Api.Controllers
                 product.StockQuantity,
                 product.IsActive,
                 product.CreatedAtUtc,
-                product.UpdatedAtUtc);
+                product.UpdatedAtUtc, product.Version);
         }
     }
 }

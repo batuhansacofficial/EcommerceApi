@@ -3,6 +3,12 @@
 **/node_modules/
 **/dist/
 .git/
+.tools/
+.vercel/
+.env
+.env.*
+**/wwwroot/
+**/test-results/
 .vs/
 .vscode/
 docker-compose.override.yml

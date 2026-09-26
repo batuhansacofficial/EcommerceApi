@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/EcommerceApi.Api/EcommerceApi.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EcommerceApi.IntegrationTests/EcommerceApi.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
